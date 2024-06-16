@@ -48,11 +48,11 @@ export default function LoginPage({ navigation }) {
         }
         await AsyncStorage.setItem('accessToken', data.access_token);
         console.log('da luu xong');
-        await navigation.navigate('Main');
+        await navigation.navigate('Home');
       })
       .then(() => {
         // Navigate to Main page only if access token is valid
-        navigation.navigate('Main');
+        navigation.navigate('Home');
       })
       .catch((error) => {
         console.error(error);
