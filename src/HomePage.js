@@ -1,68 +1,125 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity } from 'react-native';
-import  CheckBox  from '@react-native-community/checkbox';
+import { View, Text, TextInput, Button, StyleSheet, Alert, FlatList, TouchableOpacity, PermissionsAndroid, ActivityIndicator } from 'react-native';
+import CheckBox from '@react-native-community/checkbox';
 import axios from 'axios';
 import { API_URL } from '@env';
 import { getData } from './Utility';
+import Geolocation from 'react-native-geolocation-service';
 
 export default function AttendanceForm() {
   const [code, setCode] = useState('');
   const [formData, setFormData] = useState(null);
-  const [answers, setAnswers] = useState({});
+  const [answers, setAnswers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
 
   const handleSubmitCode = async () => {
     let config = {
       method: 'get',
       maxBodyLength: Infinity,
       url: `${API_URL}/student/get-form-by-code?code=${code}`,
-      headers: { 
+      headers: {
         'Authorization': 'Bearer ' + await getData('accessToken')
       }
     };
-    
+
     axios.request(config)
       .then((response) => {
         setFormData(response.data);
         const falseAnswers = response.data.questions.flatMap(question =>
-          question.answers
-            .map(answer => ({ id: answer.id, isTrue: false }))
+          question.answers.map(answer => ({ id: answer.id, isTrue: false }))
         );
-        console.log(falseAnswers);
         setAnswers(falseAnswers);
       })
       .catch((error) => {
-        Alert.alert("Error", error.response.data.message || "Có lỗi xảy ra!");
+        Alert.alert("Có lỗi xảy ra!");
+        console.log(error);
       });
   };
 
   const handleSubmitAnswers = async () => {
-    const submitData = {
-      code: formData.code,
-      answers: answers.map((answer) => ({
-        id: answer.id,
-        isTrue: answer.isTrue
-      }))
-    };
-    console.log(submitData);
-
-    let config = {
-      method: 'post',
-      maxBodyLength: Infinity,
-      url: `${API_URL}/student/submit-answers`,
-      headers: {
-        'Authorization': 'Bearer ' + await getData('accessToken'),
-        'Content-Type': 'application/json'
-      },
-      data: submitData
+    setIsLoading(true);
+    const getCurrentLocation = () => {
+      return new Promise((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          position => {
+            const { latitude, longitude } = position.coords;
+            resolve({ latitude, longitude });
+          },
+          error => {
+            reject(error.message);
+          },
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 1000 }
+        );
+      });
     };
 
-    // axios.request(config)
-    //   .then((response) => {
-    //     Alert.alert("Success", "Câu trả lời đã được gửi!");
-    //   })
-    //   .catch((error) => {
-    //     Alert.alert("Error", error.response.data.message || "Có lỗi xảy ra!");
-    //   });
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Yêu cầu quyền truy cập vị trí',
+            message: 'Ứng dụng cần quyền truy cập vị trí để lấy tọa độ địa lý hiện tại.',
+            buttonNeutral: 'Hỏi lại sau',
+            buttonNegative: 'Hủy bỏ',
+            buttonPositive: 'Đồng ý',
+          },
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          alert('Quyền truy cập vị trí bị từ chối.');
+          return;
+        }
+      }
+
+      const location = await getCurrentLocation();
+
+
+      let submitData = JSON.stringify({
+        "code": formData.code,
+        "latitude": location.latitude, // Gửi latitude
+        "longitude": location.longitude, // Gửi longitude
+        answers: answers.map((answer) => ({
+          id: answer.id,
+          isTrue: answer.isTrue
+        }))
+      });
+      console.log(submitData);
+
+      let config = {
+        method: 'post',
+        maxBodyLength: Infinity,
+        url: `${API_URL}/student/submit-answer`,
+        headers: {
+          'Authorization': 'Bearer ' + await getData('accessToken'),
+          'Content-Type': 'application/json'
+        },
+        data: submitData
+      };
+      setIsLoading(false);
+
+      axios.request(config)
+        .then((response) => {
+          if (response.status === 200) {
+            Alert.alert("Success", "Bạn đã điểm danh thành công!");
+          }
+          if (response.status === 400 && response.data.message === "Answer is not correct") {
+            Alert.alert("Fail", "Bạn đã trả lời sai câu hỏi!");
+          }
+        })
+        .catch((error) => {
+          console.log(error);
+          console.log(error.response.data);
+          if (error.response.data.message === "Answer is not correct") {
+            Alert.alert("Fail", "Bạn đã trả lời sai câu hỏi!");
+          }
+        });
+
+    } catch (error) {
+      console.error(error);
+      alert('Lỗi khi lấy vị trí hiện tại. Vui lòng kiểm tra lại quyền truy cập vị trí.');
+      setIsLoading(false);
+    }
   };
 
   const handleAnswerChange = (questionIndex, answerId) => {
@@ -77,24 +134,20 @@ export default function AttendanceForm() {
 
   const backToFillCode = () => {
     setFormData(null);
-    setAnswers({});
+    setAnswers([]);
   };
 
   const checkIsTrueFromId = (answerId) => {
-    // Kiểm tra xem có dữ liệu trong `answers` không
     if (answers && answers.length > 0) {
-      // Lặp qua từng câu trả lời trong mảng `answers`
       for (const answer of answers) {
-        // Nếu id của câu trả lời trùng với answerId và isTrue là true, trả về true
         if (answer.id === answerId && answer.isTrue) {
           return true;
         }
       }
     }
-    // Nếu không tìm thấy câu trả lời tương ứng hoặc isTrue không phải là true, trả về false
     return false;
-  }
-  
+  };
+
   return (
     <View style={styles.container}>
       {!formData ? (
@@ -140,6 +193,11 @@ export default function AttendanceForm() {
               <Text style={styles.buttonText}>Quay lại điền code khác</Text>
             </TouchableOpacity>
           </View>
+          {isLoading ? ( // Render loading indicator if isLoading is true
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007BFF" />
+            </View>
+          ) : null}
         </>
       )}
     </View>
@@ -234,5 +292,15 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
