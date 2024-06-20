@@ -81,7 +81,7 @@ export default function LoginPage({ navigation }) {
           </View>
         </View>
         <View style={styles.row2Bot}>
-          <TouchableOpacity style={styles.signUp}>
+          <TouchableOpacity style={styles.signUp} onPress={() => navigation.navigate('SignUp')}>
             <Text style={styles.signUpText}>Sign Up</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.nothing1}></TouchableOpacity>
