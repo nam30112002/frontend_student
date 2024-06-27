@@ -106,12 +106,18 @@ export default function AttendanceForm() {
           if (response.status === 400 && response.data.message === "Answer is not correct") {
             Alert.alert("Fail", "Bạn đã trả lời sai câu hỏi!");
           }
+          if (response.status === 400 && response.data.message === "Location is not correct") {
+            Alert.alert("Fail", "Bạn không ở trong phạm vi điểm danh!");
+          }
         })
         .catch((error) => {
           console.log(error);
           console.log(error.response.data);
           if (error.response.data.message === "Answer is not correct") {
             Alert.alert("Fail", "Bạn đã trả lời sai câu hỏi!");
+          }
+          if (error.response.data.message === "Location is not correct") {
+            Alert.alert("Fail", "Bạn không ở trong phạm vi điểm danh!");
           }
         });
 
